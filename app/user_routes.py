@@ -1,28 +1,33 @@
+from __future__ import annotations
+
 from flask import Blueprint, jsonify, request
 
-from app.models import DB, SEQ, User
-from app.schemas import require_str
+from .models import STORE
+from .schemas import ApiError, get_json, require_str
 
 bp = Blueprint("users", __name__)
 
-
-@bp.get("/")
+@bp.get("/users")
 def list_users():
-    users = [u.__dict__ for u in DB["users"].values()]
-    return jsonify(users)
+    return jsonify(list(STORE.users.values())), 200
 
-
-@bp.post("/")
+@bp.post("/user")
 def create_user():
-    data = request.get_json(silent=True) or {}
-    try:
-        username = require_str(data, "username")
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    data = get_json(request)
+    name = require_str(data, "name")
+    user = STORE.create_user(name)
+    return jsonify(user), 201
 
-    user_id = SEQ["users"]
-    SEQ["users"] += 1
+@bp.get("/user/<int:user_id>")
+def get_user(user_id: int):
+    user = STORE.users.get(user_id)
+    if not user:
+        raise ApiError("User not found", 404)
+    return jsonify(user), 200
 
-    user = User(id=user_id, username=username)
-    DB["users"][user_id] = user
-    return jsonify(user.__dict__), 201
+@bp.delete("/user/<int:user_id>")
+def delete_user(user_id: int):
+    ok = STORE.delete_user(user_id)
+    if not ok:
+        raise ApiError("User not found", 404)
+    return jsonify({"status": "deleted", "user_id": user_id}), 200
