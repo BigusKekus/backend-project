@@ -1,22 +1,19 @@
-from flask import Flask
+from datetime import datetime
 
-from app.views import bp as views_bp
-from app.user_routes import bp as users_bp
-from app.category_routes import bp as categories_bp
-from app.currency_routes import bp as currencies_bp
-from app.record_routes import bp as records_bp
+from flask import Blueprint, jsonify
+
+bp = Blueprint("views", __name__)
 
 
-def create_app() -> Flask:
-    app = Flask(__name__)
+@bp.get("/")
+def hello():
+    return jsonify({"message": "Hello from backend!"}), 200
 
-    # базові ендпоінти
-    app.register_blueprint(views_bp)
 
-    # API ендпоінти (з префіксом /api)
-    app.register_blueprint(users_bp, url_prefix="/api/users")
-    app.register_blueprint(categories_bp, url_prefix="/api/categories")
-    app.register_blueprint(currencies_bp, url_prefix="/api/currencies")
-    app.register_blueprint(records_bp, url_prefix="/api/records")
+@bp.get("/healthcheck")
+def healthcheck():
+    return jsonify({"status": "ok", "date": datetime.utcnow().isoformat()}), 200
 
-    return app
+
+def register_routes(app):
+    app.register_blueprint(bp)
