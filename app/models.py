@@ -1,96 +1,53 @@
-from __future__ import annotations
+from datetime import datetime
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from app.extensions import db
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+class Currency(db.Model):
+    __tablename__ = "currencies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(8), unique=True, nullable=False)
+    name = db.Column(db.String(64), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<Currency {self.code}>"
 
 
-@dataclass
-class DataStore:
-    users: dict[int, dict[str, Any]] = field(default_factory=dict)
-    categories: dict[int, dict[str, Any]] = field(default_factory=dict)
-    records: dict[int, dict[str, Any]] = field(default_factory=dict)
+class User(db.Model):
+    __tablename__ = "users"
 
-    user_seq: int = 1
-    category_seq: int = 1
-    record_seq: int = 1
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
 
-    def seed(self) -> None:
+    default_currency_id = db.Column(db.Integer, db.ForeignKey("currencies.id"), nullable=True)
+    default_currency = db.relationship("Currency", foreign_keys=[default_currency_id])
 
-        if not self.categories:
-            self.create_category("Food")
-            self.create_category("Transport")
-            self.create_category("Subscriptions")
-
-        if not self.users:
-            u = self.create_user("Misha")
-
-            self.create_record(user_id=u["id"], category_id=1, amount=120.5)
-            self.create_record(user_id=u["id"], category_id=2, amount=60)
+    records = db.relationship("Record", back_populates="user", cascade="all, delete-orphan")
 
 
-    def create_user(self, name: str) -> dict[str, Any]:
-        user = {"id": self.user_seq, "name": name}
-        self.users[self.user_seq] = user
-        self.user_seq += 1
-        return user
+class Category(db.Model):
+    __tablename__ = "categories"
 
-    def delete_user(self, user_id: int) -> bool:
-        if user_id not in self.users:
-            return False
-        del self.users[user_id]
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
 
-        to_delete = [rid for rid, r in self.records.items() if r["user_id"] == user_id]
-        for rid in to_delete:
-            del self.records[rid]
-        return True
-
-    def create_category(self, name: str) -> dict[str, Any]:
-        cat = {"id": self.category_seq, "name": name}
-        self.categories[self.category_seq] = cat
-        self.category_seq += 1
-        return cat
-
-    def delete_category(self, category_id: int) -> bool:
-        if category_id not in self.categories:
-            return False
-        del self.categories[category_id]
-
-        to_delete = [
-            rid for rid, r in self.records.items() if r["category_id"] == category_id
-        ]
-        for rid in to_delete:
-            del self.records[rid]
-        return True
-
-    def create_record(
-        self,
-        user_id: int,
-        category_id: int,
-        amount: float,
-        created_at: str | None = None,
-    ) -> dict[str, Any]:
-        rec = {
-            "id": self.record_seq,
-            "user_id": user_id,
-            "category_id": category_id,
-            "created_at": created_at or utc_now_iso(),
-            "sum": amount,
-        }
-        self.records[self.record_seq] = rec
-        self.record_seq += 1
-        return rec
-
-    def delete_record(self, record_id: int) -> bool:
-        if record_id not in self.records:
-            return False
-        del self.records[record_id]
-        return True
+    records = db.relationship("Record", back_populates="category", cascade="all, delete-orphan")
 
 
-STORE = DataStore()
-STORE.seed()
+class Record(db.Model):
+    __tablename__ = "records"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
+
+    currency_id = db.Column(db.Integer, db.ForeignKey("currencies.id"), nullable=False)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    amount = db.Column(db.Float, nullable=False)
+
+    user = db.relationship("User", back_populates="records")
+    category = db.relationship("Category", back_populates="records")
+    currency = db.relationship("Currency")
