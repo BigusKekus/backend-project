@@ -1,1 +1,6 @@
-Flask==3.1.2
+Flask
+flask-smorest
+flask-sqlalchemy
+Flask-Migrate
+psycopg2-binary
+python-dotenv
