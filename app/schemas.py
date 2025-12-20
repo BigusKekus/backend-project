@@ -1,47 +1,75 @@
-from __future__ import annotations
-from typing import Any
-from flask import Request
+from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
-class ApiError(Exception):
-    def __init__(self, message: str, status_code: int = 400):
-        super().__init__(message)
-        self.message = message
-        self.status_code = status_code
 
-def get_json(request: Request) -> dict[str, Any]:
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        raise ApiError("JSON body is required", 400)
-    return data
+class CurrencyCreateSchema(Schema):
+    code = fields.Str(required=True, validate=validate.Length(min=1, max=8))
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=64))
 
-def require_str(data: dict[str, Any], key: str) -> str:
-    val = data.get(key)
-    if not isinstance(val, str) or not val.strip():
-        raise ApiError(f"'{key}' must be a non-empty string", 400)
-    return val.strip()
 
-def require_int(data: dict[str, Any], key: str) -> int:
-    val = data.get(key)
-    if isinstance(val, bool):
-        raise ApiError(f"'{key}' must be an integer", 400)
-    try:
-        return int(val)
-    except Exception as exc:
-        raise ApiError(f"'{key}' must be an integer", 400) from exc
+class CurrencySchema(CurrencyCreateSchema):
+    id = fields.Int(dump_only=True)
 
-def require_float(data: dict[str, Any], key: str) -> float:
-    val = data.get(key)
-    if isinstance(val, bool):
-        raise ApiError(f"'{key}' must be a number", 400)
-    try:
-        return float(val)
-    except Exception as exc:
-        raise ApiError(f"'{key}' must be a number", 400) from exc
 
-def query_int(args: dict[str, Any], key: str) -> int | None:
-    if key not in args or args.get(key) in (None, ""):
-        return None
-    try:
-        return int(args.get(key))
-    except Exception as exc:
-        raise ApiError(f"Query param '{key}' must be an integer", 400) from exc
+class UserCreateSchema(Schema):
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=120))
+    default_currency_id = fields.Int(required=False, allow_none=True)
+
+
+class UserUpdateSchema(Schema):
+    name = fields.Str(required=False, validate=validate.Length(min=1, max=120))
+    default_currency_id = fields.Int(required=False, allow_none=True)
+
+
+class UserSchema(Schema):
+    id = fields.Int(dump_only=True)
+    name = fields.Str()
+    default_currency = fields.Nested(CurrencySchema, dump_only=True)
+    default_currency_id = fields.Int(dump_only=True)
+
+
+class CategoryCreateSchema(Schema):
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=120))
+
+
+class CategorySchema(CategoryCreateSchema):
+    id = fields.Int(dump_only=True)
+
+
+class RecordCreateSchema(Schema):
+    user_id = fields.Int(required=True)
+    category_id = fields.Int(required=True)
+
+    # підтримка sum або amount (щоб не ламати ЛР2)
+    sum = fields.Float(required=False)
+    amount = fields.Float(required=False)
+
+    currency_id = fields.Int(required=False, allow_none=True)
+
+    @validates_schema
+    def validate_amount(self, data, **kwargs):
+        has_sum = "sum" in data and data["sum"] is not None
+        has_amount = "amount" in data and data["amount"] is not None
+        if not has_sum and not has_amount:
+            raise ValidationError("Provide 'sum' or 'amount'.")
+        if has_sum and has_amount:
+            raise ValidationError("Provide only one: 'sum' or 'amount'.")
+
+
+class RecordSchema(Schema):
+    id = fields.Int(dump_only=True)
+    user_id = fields.Int()
+    category_id = fields.Int()
+    currency_id = fields.Int()
+    created_at = fields.DateTime()
+    amount = fields.Float()
+    currency = fields.Nested(CurrencySchema, dump_only=True)
+
+
+class RecordQuerySchema(Schema):
+    user_id = fields.Int(required=False)
+    category_id = fields.Int(required=False)
+
+    @validates_schema
+    def validate_filters(self, data, **kwargs):
+        if not data.get("user_id") and not data.get("category_id"):
+            raise ValidationError("Provide at least 'user_id' or 'category_id'.")
